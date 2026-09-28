@@ -1,0 +1,268 @@
+{
+  "info": {
+    "name": "Alarm API Simulator E2E",
+    "description": "Postman collection for Alarm Management API Simulator with auth, trace headers, and chained variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "6f25f208-6f6f-4e31-9f11-5a3b7cc4f8f0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "auth_token", "value": "demo-token" },
+    { "key": "trace_id", "value": "trace-postman-001" },
+    { "key": "x_client_id", "value": "postman-client" },
+    { "key": "x_metadata_tag", "value": "manual-test" },
+    { "key": "asset_name", "value": "Boiler Feed Pump 101" },
+    { "key": "asset_id", "value": "" },
+    { "key": "alarm_id", "value": "" },
+    { "key": "calculation_id", "value": "" },
+    { "key": "start_time", "value": "2026-05-01T00:00:00Z" },
+    { "key": "end_time", "value": "2026-07-01T00:00:00Z" }
+  ],
+  "item": [
+    {
+      "name": "00 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health",
+        "auth": { "type": "noauth" }
+      }
+    },
+    {
+      "name": "01 - Search Asset (sets asset_id)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/assets/search?query={{asset_name}}&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "search"],
+          "query": [
+            { "key": "query", "value": "{{asset_name}}" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('asset_id', body.results[0].asset_id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Asset Metadata",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/assets/{{asset_id}}/metadata"
+      }
+    },
+    {
+      "name": "03 - Get Alarms (sets alarm_id)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/alarms?asset_id={{asset_id}}&page=1&page_size=50&sort_by=start_time&sort_order=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["alarms"],
+          "query": [
+            { "key": "asset_id", "value": "{{asset_id}}" },
+            { "key": "page", "value": "1" },
+            { "key": "page_size", "value": "50" },
+            { "key": "sort_by", "value": "start_time" },
+            { "key": "sort_order", "value": "desc" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "if (body.data && body.data.length > 0) { pm.collectionVariables.set('alarm_id', body.data[0].alarm_id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Get Alarm by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/alarms/{{alarm_id}}"
+      }
+    },
+    {
+      "name": "05 - Alarm Summary (trace headers)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "trace_id", "value": "{{trace_id}}" },
+          { "key": "x-client-id", "value": "{{x_client_id}}" },
+          { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"severity\": [\"high\", \"critical\"],\n  \"group_by\": [\"alarm_name\"],\n  \"kpis\": [\"alarm_count\", \"recurring_rate\", \"avg_ack_delay\"]\n}"
+        },
+        "url": "{{baseUrl}}/alarms/summary"
+      }
+    },
+    {
+      "name": "06 - Alarm Trends",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"bucket\": \"daily\",\n  \"metrics\": [\"alarm_count\", \"avg_ack_delay\"]\n}"
+        },
+        "url": "{{baseUrl}}/alarms/trends"
+      }
+    },
+    {
+      "name": "07 - Alarm Correlation (trace headers)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "trace_id", "value": "{{trace_id}}" },
+          { "key": "x-client-id", "value": "{{x_client_id}}" },
+          { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"correlation_method\": \"cooccurrence\",\n  \"lag_window_minutes\": 15,\n  \"severity_threshold\": \"medium\",\n  \"min_support\": 1\n}"
+        },
+        "url": "{{baseUrl}}/alarms/correlation"
+      }
+    },
+    {
+      "name": "08 - Flood Analysis",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"unit\": \"Unit 2\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"threshold_count\": 10,\n  \"rolling_window_minutes\": 10\n}"
+        },
+        "url": "{{baseUrl}}/alarms/flood-analysis"
+      }
+    },
+    {
+      "name": "09 - Rationalization Candidates",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"recurrence_threshold\": 5,\n  \"stale_minutes_threshold\": 180\n}"
+        },
+        "url": "{{baseUrl}}/alarms/rationalization-candidates"
+      }
+    },
+    {
+      "name": "10 - Priority Score",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"alarm_id\": \"{{alarm_id}}\"\n}"
+        },
+        "url": "{{baseUrl}}/alarms/priority-score"
+      }
+    },
+    {
+      "name": "11 - Operator Recommendations (trace headers)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "trace_id", "value": "{{trace_id}}" },
+          { "key": "x-client-id", "value": "{{x_client_id}}" },
+          { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"alarm_id\": \"{{alarm_id}}\",\n  \"include_related\": true,\n  \"include_asset_context\": true,\n  \"include_historical_pattern\": true\n}"
+        },
+        "url": "{{baseUrl}}/recommendations/operator-actions"
+      }
+    },
+    {
+      "name": "12 - Generate Calculation Code (sets calculation_id)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"calculation_type\": \"alarm_flood_index\",\n  \"filters\": {\n    \"unit\": \"Unit 3\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+        },
+        "url": "{{baseUrl}}/calculation-code/generate"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('calculation_id', body.calculation_id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 - Execute Calculation Code (trace headers)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "trace_id", "value": "{{trace_id}}" },
+          { "key": "x-client-id", "value": "{{x_client_id}}" },
+          { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"calculation_id\": \"{{calculation_id}}\",\n  \"filters\": {\n    \"unit\": \"Unit 3\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+        },
+        "url": "{{baseUrl}}/calculation-code/execute"
+      }
+    },
+    {
+      "name": "14 - KPI Definitions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/analytics/kpi-definitions"
+      }
+    }
+  ]
+}
