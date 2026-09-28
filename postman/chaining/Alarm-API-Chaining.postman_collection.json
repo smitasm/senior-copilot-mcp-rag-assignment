@@ -1,0 +1,646 @@
+{
+  "info": {
+    "name": "Alarm API Simulator - Chaining Flows",
+    "description": "Postman collection with 10 multi-step API chaining scenarios aligned to docs/api_chaining_catalog.json.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "b51775c5-a9d9-4a98-8ec3-b2da3742f1f1"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "auth_token", "value": "demo-token" },
+    { "key": "trace_id", "value": "trace-chain-001" },
+    { "key": "x_client_id", "value": "postman-chain" },
+    { "key": "x_metadata_tag", "value": "chain-test" },
+    { "key": "start_time", "value": "2026-05-01T00:00:00Z" },
+    { "key": "end_time", "value": "2026-07-01T00:00:00Z" },
+    { "key": "asset_id", "value": "" },
+    { "key": "asset_id_2", "value": "" },
+    { "key": "asset_id_3", "value": "" },
+    { "key": "alarm_id", "value": "" },
+    { "key": "calculation_id", "value": "" },
+    { "key": "window_start", "value": "{{start_time}}" },
+    { "key": "window_end", "value": "{{end_time}}" }
+  ],
+  "item": [
+    {
+      "name": "CHAIN-01 Asset -> Summary -> Rationalization",
+      "item": [
+        {
+          "name": "1) Search Boiler Feed Pump 101",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/assets/search?query=Boiler%20Feed%20Pump%20101&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.results.length).to.be.above(0);",
+                  "pm.collectionVariables.set('asset_id', body.results[0].asset_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Alarm Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"severity\": [\"high\", \"critical\"],\n  \"group_by\": [\"alarm_name\"],\n  \"kpis\": [\"alarm_count\", \"recurring_rate\", \"avg_ack_delay\"]\n}"
+            },
+            "url": "{{baseUrl}}/alarms/summary"
+          }
+        },
+        {
+          "name": "3) Rationalization Candidates",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"recurrence_threshold\": 5\n}"
+            },
+            "url": "{{baseUrl}}/alarms/rationalization-candidates"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-02 Flood -> Alarms -> Summary",
+      "item": [
+        {
+          "name": "1) Flood Analysis Unit 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit\": \"Unit 2\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"threshold_count\": 10,\n  \"rolling_window_minutes\": 10\n}"
+            },
+            "url": "{{baseUrl}}/alarms/flood-analysis"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const body = pm.response.json();",
+                  "const ws = body.flood_windows || [];",
+                  "if (ws.length > 0) {",
+                  "  pm.collectionVariables.set('window_start', ws[0].start);",
+                  "  pm.collectionVariables.set('window_end', ws[0].end);",
+                  "} else {",
+                  "  pm.collectionVariables.set('window_start', pm.collectionVariables.get('start_time'));",
+                  "  pm.collectionVariables.set('window_end', pm.collectionVariables.get('end_time'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Get Alarms for Window",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/alarms?unit=Unit%202&start_time={{window_start}}&end_time={{window_end}}&page=1&page_size=200"
+          }
+        },
+        {
+          "name": "3) Summary by Asset+Severity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit\": \"Unit 2\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"group_by\": [\"asset_id\", \"asset_name\", \"severity\"],\n  \"kpis\": [\"alarm_count\"]\n}"
+            },
+            "url": "{{baseUrl}}/alarms/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-03 Root Cause + Recommendations",
+      "item": [
+        {
+          "name": "1) Search Compressor Assets",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/assets/search?query=compressor&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const r = pm.response.json().results || [];",
+                  "pm.expect(r.length).to.be.above(0);",
+                  "pm.collectionVariables.set('asset_id', r[0].asset_id);",
+                  "pm.collectionVariables.set('asset_id_2', (r[1] || r[0]).asset_id);",
+                  "pm.collectionVariables.set('asset_id_3', (r[2] || r[0]).asset_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Correlation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\", \"{{asset_id_2}}\", \"{{asset_id_3}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"correlation_method\": \"cooccurrence\",\n  \"severity_threshold\": \"medium\",\n  \"min_support\": 1\n}"
+            },
+            "url": "{{baseUrl}}/alarms/correlation"
+          }
+        },
+        {
+          "name": "3) Get Latest Alarm on Asset",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/alarms?asset_id={{asset_id}}&page=1&page_size=1&sort_by=start_time&sort_order=desc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const rows = pm.response.json().data || [];",
+                  "if (rows.length > 0) pm.collectionVariables.set('alarm_id', rows[0].alarm_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4) Asset Metadata",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/assets/{{asset_id}}/metadata"
+          }
+        },
+        {
+          "name": "5) Operator Recommendations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alarm_id\": \"{{alarm_id}}\",\n  \"include_related\": true\n}"
+            },
+            "url": "{{baseUrl}}/recommendations/operator-actions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-04 Critical Density KPI -> Execute -> Summary",
+      "item": [
+        {
+          "name": "1) Generate Calculation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calculation_type\": \"critical_alarm_density\",\n  \"filters\": {\n    \"unit\": \"Unit 3\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/calculation-code/generate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "pm.collectionVariables.set('calculation_id', pm.response.json().calculation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Execute Calculation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calculation_id\": \"{{calculation_id}}\",\n  \"filters\": {\n    \"unit\": \"Unit 3\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/calculation-code/execute"
+          }
+        },
+        {
+          "name": "3) Summary by Asset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit\": \"Unit 3\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"group_by\": [\"asset_id\", \"asset_name\"],\n  \"kpis\": [\"alarm_count\", \"critical_count\"]\n}"
+            },
+            "url": "{{baseUrl}}/alarms/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-05 Asset Active -> Recommendation",
+      "item": [
+        {
+          "name": "1) Search Boiler Feed Pump 102",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/assets/search?query=Boiler%20Feed%20Pump%20102&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('asset_id', body.results[0].asset_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Get Active Alarms",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/alarms?asset_id={{asset_id}}&status=active&page=1&page_size=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const rows = pm.response.json().data || [];",
+                  "if (rows.length > 0) pm.collectionVariables.set('alarm_id', rows[0].alarm_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3) Recommendations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alarm_id\": \"{{alarm_id}}\",\n  \"include_related\": true\n}"
+            },
+            "url": "{{baseUrl}}/recommendations/operator-actions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-06 Stale + Severity Context",
+      "item": [
+        {
+          "name": "1) Rationalization Candidates",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"site\": \"NorthPlant\",\n  \"unit\": \"Unit 1\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"stale_minutes_threshold\": 180,\n  \"recurrence_threshold\": 6\n}"
+            },
+            "url": "{{baseUrl}}/alarms/rationalization-candidates"
+          }
+        },
+        {
+          "name": "2) Summary by Severity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"site\": \"NorthPlant\",\n  \"unit\": \"Unit 1\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"group_by\": [\"severity\"],\n  \"kpis\": [\"alarm_count\", \"suppression_candidate_rate\"]\n}"
+            },
+            "url": "{{baseUrl}}/alarms/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-07 Response Efficiency + Trend",
+      "item": [
+        {
+          "name": "1) Generate Efficiency Calc",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calculation_type\": \"operator_response_efficiency\",\n  \"filters\": {\n    \"site\": \"SouthPlant\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/calculation-code/generate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "pm.collectionVariables.set('calculation_id', pm.response.json().calculation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Execute Efficiency Calc",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calculation_id\": \"{{calculation_id}}\",\n  \"filters\": {\n    \"site\": \"SouthPlant\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/calculation-code/execute"
+          }
+        },
+        {
+          "name": "3) Trends",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"site\": \"SouthPlant\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"bucket\": \"daily\",\n  \"metrics\": [\"avg_ack_delay\"]\n}"
+            },
+            "url": "{{baseUrl}}/alarms/trends"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-08 Motor Correlation",
+      "item": [
+        {
+          "name": "1) Search Motor Assets Unit 5",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/assets/search?query=motor&unit=Unit%205&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const r = pm.response.json().results || [];",
+                  "pm.expect(r.length).to.be.above(0);",
+                  "pm.collectionVariables.set('asset_id', r[0].asset_id);",
+                  "pm.collectionVariables.set('asset_id_2', (r[1] || r[0]).asset_id);",
+                  "pm.collectionVariables.set('asset_id_3', (r[2] || r[0]).asset_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Correlation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset_ids\": [\"{{asset_id}}\", \"{{asset_id_2}}\", \"{{asset_id_3}}\"],\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"severity_threshold\": \"high\",\n  \"correlation_method\": \"cooccurrence\",\n  \"min_support\": 1\n}"
+            },
+            "url": "{{baseUrl}}/alarms/correlation"
+          }
+        },
+        {
+          "name": "3) Summary Context",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit\": \"Unit 5\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"alarm_types\": [\"safety\", \"device\"],\n  \"group_by\": [\"asset_id\", \"alarm_name\"],\n  \"kpis\": [\"alarm_count\"]\n}"
+            },
+            "url": "{{baseUrl}}/alarms/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-09 East Active -> Priority -> Recommendation",
+      "item": [
+        {
+          "name": "1) Get EastRefinery Active Alarms",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/alarms?site=EastRefinery&status=active&page=1&page_size=50&sort_by=start_time&sort_order=desc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const rows = pm.response.json().data || [];",
+                  "pm.expect(rows.length).to.be.above(0);",
+                  "pm.collectionVariables.set('alarm_id', rows[0].alarm_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Alarm Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/alarms/{{alarm_id}}"
+          }
+        },
+        {
+          "name": "3) Priority Score",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alarm_id\": \"{{alarm_id}}\"\n}"
+            },
+            "url": "{{baseUrl}}/alarms/priority-score"
+          }
+        },
+        {
+          "name": "4) Recommendations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alarm_id\": \"{{alarm_id}}\"\n}"
+            },
+            "url": "{{baseUrl}}/recommendations/operator-actions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHAIN-10 Nuisance KPI -> Execute -> Candidates",
+      "item": [
+        {
+          "name": "1) Generate Nuisance Calculation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calculation_type\": \"nuisance_alarm_score\",\n  \"filters\": {\n    \"unit\": \"Unit 4\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/calculation-code/generate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "pm.collectionVariables.set('calculation_id', pm.response.json().calculation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Execute Nuisance Calculation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "trace_id", "value": "{{trace_id}}" },
+              { "key": "x-client-id", "value": "{{x_client_id}}" },
+              { "key": "x-metadata-tag", "value": "{{x_metadata_tag}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calculation_id\": \"{{calculation_id}}\",\n  \"filters\": {\n    \"unit\": \"Unit 4\",\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/calculation-code/execute"
+          }
+        },
+        {
+          "name": "3) Rationalization Candidates",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unit\": \"Unit 4\",\n  \"time_range\": {\n    \"start_time\": \"{{start_time}}\",\n    \"end_time\": \"{{end_time}}\"\n  },\n  \"recurrence_threshold\": 8\n}"
+            },
+            "url": "{{baseUrl}}/alarms/rationalization-candidates"
+          }
+        }
+      ]
+    }
+  ]
+}

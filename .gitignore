@@ -1,0 +1,11 @@
+@'
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+.coverage
+htmlcov/
+*.db
+chroma_db/
+'@ | Set-Content .gitignore
