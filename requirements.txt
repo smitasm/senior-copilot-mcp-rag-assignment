@@ -1,0 +1,27 @@
+# Pinned to the exact versions confirmed working across every phase of this
+# project (both in the development sandbox and on the Windows machine this
+# was built against). One requirements file serves the whole repo: it is
+# used to build the single Docker image shared by all three services
+# (alarm-api, ticketing-api, gui), and to run the test suite, in CI and
+# locally alike.
+
+# --- web frameworks / HTTP -------------------------------------------------
+fastapi==0.141.1
+starlette==1.7.0          # imported directly (StarletteHTTPException), not left to transitive resolution
+uvicorn==0.54.0
+httpx==0.28.1
+
+# --- data validation ---------------------------------------------------------
+pydantic==2.13.5
+
+# --- MCP SDK (v2 - see mcp_servers/ and orchestrator/mcp_client.py) --------------
+mcp[cli]==2.2.0
+
+# --- GUI --------------------------------------------------------------------------
+streamlit==1.64.0
+
+# --- testing (also needed inside the image: tests run in CI against this
+# same image, and `docker compose run gui pytest tests -q` is a documented
+# way to verify a fresh container) -------------------------------------------------
+pytest==9.1.1
+pytest-asyncio==1.4.0
