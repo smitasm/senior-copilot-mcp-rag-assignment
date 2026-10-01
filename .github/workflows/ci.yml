@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The full suite - unit, integration (FastAPI TestClient against the
+      # simulators), and MCP protocol tests (real ClientSession over
+      # in-memory streams) - needs no external services and no network
+      # access. There is nothing optional or flaky in here by design: every
+      # LLM-touching test uses a deterministic FakeLLM (see
+      # tests/unit/test_orchestrator_agent.py and
+      # tests/unit/test_gui_app.py), so this job never depends on Ollama
+      # being reachable, which it isn't in CI.
+      - name: Run test suite
+        run: python -m pytest tests -q
+
+      - name: Build Docker image (syntax/dependency check only - not run)
+        run: docker build -t copilot:ci .

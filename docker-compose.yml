@@ -1,0 +1,73 @@
+# Three services, one shared image (see Dockerfile). The GUI service also
+# hosts the orchestrator and all three MCP servers in-process - they are not
+# separate containers; see orchestrator/mcp_client.py for why that's a
+# deliberate choice, not a shortcut.
+#
+# Ollama is NOT containerized here: it runs natively on the host (for GPU
+# access and because that's how it was developed and tested throughout this
+# project). The `gui` service reaches it via host.docker.internal, which
+# Docker Desktop (Windows/Mac) provides automatically; the extra_hosts entry
+# below is what makes the same compose file work on a native Linux Docker
+# host too, where that hostname doesn't resolve by default.
+#
+# Run:      docker compose up --build
+# Rerun:    docker compose up            (skips the rebuild once images exist)
+# Tests:    docker compose run --rm gui python -m pytest tests -q
+# Tear down: docker compose down
+
+services:
+  alarm-api:
+    build: .
+    command: ["python", "-m", "uvicorn", "alarm_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      ALARM_API_TOKEN: demo-token
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  ticketing-api:
+    build: .
+    command: ["python", "-m", "uvicorn", "ticketing_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    environment:
+      TICKETING_API_TOKEN: demo-token
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  gui:
+    build: .
+    command: ["python", "-m", "streamlit", "run", "gui/app.py", "--server.address", "0.0.0.0",
+             "--server.port", "8501", "--server.headless", "true"]
+    ports:
+      - "8501:8501"
+    environment:
+      ALARM_API_URL: http://alarm-api:8000
+      TICKETING_API_URL: http://ticketing-api:8001
+      ALARM_API_TOKEN: demo-token
+      TICKETING_API_TOKEN: demo-token
+      OLLAMA_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: qwen2.5:3b
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # no-op on Docker Desktop; required on native Linux Docker
+    depends_on:
+      alarm-api:
+        condition: service_healthy
+      ticketing-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+            "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s

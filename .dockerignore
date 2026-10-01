@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+*.pyc
+.git/
+.github/
+.env
+.coverage
+htmlcov/
+*.db
+chroma_db/
+newman-*.json
+smoke_test*.py
+.streamlit/
